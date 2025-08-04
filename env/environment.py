@@ -16,6 +16,19 @@ class Environment:
         self.agent_alive = True
         self.gold_grabbed = False
 
+        # Thêm scoring system
+        self.score = 0
+        self.agent_arrows = 1  # 1 cung tên như yêu cầu
+        
+        # Thêm wumpus movement
+        self.wumpus_move_counter = 0
+        self.wumpus_move_interval = 5  # Wumpus di chuyển sau mỗi 5 bước
+        
+        # Thêm arrow tracking
+        self.arrow_in_flight = False
+        self.arrow_target = None
+        self.arrow_direction = None
+        
         self.map = [[Cell() for _ in range(N)] for _ in range(N)]
 
         self.agent_pos = (0, 0)
@@ -101,8 +114,19 @@ class Environment:
         percepts = {
             "breeze": False,
             "stench": False,
-            "glitter": self.map[x][y].has_gold and not self.gold_grabbed
+            "glitter": self.map[x][y].has_gold and not self.gold_grabbed,
+            "scream": False  # Thêm scream percept
         }
+        # Kiểm tra arrow hit (turn sau khi bắn)
+        if self.arrow_in_flight:
+            self.check_arrow_hit()
+            self.arrow_in_flight = False
+        
+        # Xử lý scream percept
+        if hasattr(self, 'scream_this_turn') and self.scream_this_turn:
+            percepts["scream"] = True
+            self.scream_this_turn = False
+            
         # Breeze: có pit kề
         for nx, ny in self.get_neighbors(x, y):
             if self.map[nx][ny].has_pit:
@@ -132,6 +156,7 @@ class Environment:
         if not self.agent_alive:
             return
         if action == "forward":
+            self.score -= 1
             dx, dy = [(0,1), (1,0), (0,-1), (-1,0)][self.agent_dir]
             nx, ny = self.agent_pos[0]+dx, self.agent_pos[1]+dy
             if 0 <= nx < self.N and 0 <= ny < self.N:
@@ -139,16 +164,88 @@ class Environment:
                 # Kiểm tra pit/wumpus
                 if self.map[nx][ny].has_pit:
                     self.agent_alive = False
+                    self.score -= 1000  # Die penalty
                 elif self.map[nx][ny].has_wumpus and self.wumpus_alive[self.wumpus_idx_at(nx, ny)]:
                     self.agent_alive = False
+                    self.score -= 1000  # Die penalty
         elif action == "left":
+            self.score -= 1
             self.agent_dir = (self.agent_dir - 1) % 4
         elif action == "right":
+            self.score -= 1
             self.agent_dir = (self.agent_dir + 1) % 4
         elif action == "grab":
+            self.score -= 1
             x, y = self.agent_pos
             if self.map[x][y].has_gold:
                 self.gold_grabbed = True
+                self.score += 1000  # Gold bonus
         elif action == "climb":
+            self.score -= 1
             pass
+        elif action == "shoot":
+            # Xử lý bắn tên
+            if self.agent_arrows > 0:
+                self.agent_arrows -= 1
+                self.score -= 10  # Arrow cost
+                
+                # Tính hướng bắn
+                dx, dy = [(0,1), (1,0), (0,-1), (-1,0)][self.agent_dir]
+                arrow_x, arrow_y = self.agent_pos[0] + dx, self.agent_pos[1] + dy
+                
+                # Kiểm tra mũi tên có bay ra ngoài map không
+                if 0 <= arrow_x < self.N and 0 <= arrow_y < self.N:
+                    self.arrow_in_flight = True
+                    self.arrow_target = (arrow_x, arrow_y)
+                    self.arrow_direction = self.agent_dir
+        
+        # Di chuyển Wumpus sau mỗi bước
+        self.move_wumpus()
+
+    def check_arrow_hit(self):
+        """Kiểm tra mũi tên có trúng Wumpus không"""
+        if not self.arrow_target:
+            return
+            
+        x, y = self.arrow_target
+        if self.map[x][y].has_wumpus and self.wumpus_alive[self.wumpus_idx_at(x, y)]:
+            # Wumpus bị giết
+            self.wumpus_alive[self.wumpus_idx_at(x, y)] = False
+            # Tạo scream percept cho turn tiếp theo
+            self.scream_this_turn = True
+            self.score -= 10  # Trừ điểm cho việc bắn tên
+
+    def move_wumpus(self):
+        """Di chuyển Wumpus ngẫu nhiên"""
+        self.wumpus_move_counter += 1
+        if self.wumpus_move_counter >= self.wumpus_move_interval:
+            self.wumpus_move_counter = 0
+            
+            # Tìm tất cả Wumpus còn sống
+            for i in range(self.N):
+                for j in range(self.N):
+                    if self.map[i][j].has_wumpus and self.wumpus_alive[self.wumpus_idx_at(i, j)]:
+                        # Di chuyển Wumpus này
+                        self.move_single_wumpus(i, j)
+
+    def move_single_wumpus(self, x, y):
+        """Di chuyển một Wumpus từ vị trí (x,y)"""
+        import random
+        
+        # Tìm các ô kề có thể di chuyển
+        possible_moves = []
+        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < self.N and 0 <= ny < self.N:
+                # Wumpus có thể đi vào ô có gold
+                if not self.map[nx][ny].has_pit:
+                    possible_moves.append((nx, ny))
+        
+        if possible_moves:
+            # Chọn ngẫu nhiên một ô để di chuyển
+            new_x, new_y = random.choice(possible_moves)
+            
+            # Di chuyển Wumpus
+            self.map[x][y].has_wumpus = False
+            self.map[new_x][new_y].has_wumpus = True
 
