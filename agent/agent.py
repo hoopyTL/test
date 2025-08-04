@@ -23,6 +23,23 @@ class Agent:
         self.kb[y][x] = 'visited'
         self.percept_history[(x, y)] = dict(percepts)
 
+        # Xử lý scream percept - Wumpus bị giết
+        if percepts.get('scream', False):
+            # Cập nhật KB: tất cả ô có stench giờ có thể an toàn
+            for i in range(self.N):
+                for j in range(self.N):
+                    if self.kb[j][i] == 'warn':
+                        # Kiểm tra xem ô này có còn stench không
+                        has_stench = False
+                        for nx, ny in self.get_neighbors(i, j):
+                            if (nx, ny) in self.visited:
+                                p = self.percept_history.get((nx, ny), {})
+                                if p.get('stench', False):
+                                    has_stench = True
+                                    break
+                        if not has_stench:
+                            self.kb[j][i] = 'safe'
+        
         # 1. Mark all neighbors safe if NO warn
         if not percepts.get('breeze', False) and not percepts.get('stench', False):
             for nx, ny in self.get_neighbors(x, y):
@@ -73,23 +90,38 @@ class Agent:
                     if has_no_warn_neighbor:
                         self.kb[j][i] = 'safe'
 
-        if percepts.get('glitter', False):
-            self.has_gold = True
-
     def next_action(self, percepts):
         self.update_percepts(percepts)
         x, y = self.x, self.y
+        # Ưu tiên lấy vàng nếu thấy glitter
         if percepts.get('glitter'):
             self.action_log.append('grab')
             return 'grab'
+        # Về nhà nếu đã có vàng và ở (0,0)
         if getattr(self, 'has_gold', False) and (x, y) == (0, 0):
             self.action_log.append('climb')
             return 'climb'
+        # Về nhà nếu đã có vàng
         if getattr(self, 'has_gold', False):
             action = self.move_towards(0, 0)
             self.action_log.append(action)
             return action
 
+        # Logic bắn tên: nếu có stench và có tên thì bắn
+        if percepts.get('stench', False) and hasattr(self, 'agent_arrows') and self.agent_arrows > 0:
+            # Tìm Wumpus để bắn
+            wumpus_target = self.find_wumpus_to_shoot()
+            if wumpus_target:
+                # Xoay hướng về phía Wumpus
+                action = self.turn_towards(wumpus_target)
+                if action != 'forward':
+                    self.action_log.append(action)
+                    return action
+                else:
+                    # Đã hướng đúng, bắn tên
+                    self.action_log.append('shoot')
+                    return 'shoot'
+                    
         # Ưu tiên đi safe chưa đi
         target = self.find_unvisited(['safe'])
         if target:
@@ -178,9 +210,65 @@ class Agent:
             self.dir = (self.dir - 1) % 4
         elif action == 'right':
             self.dir = (self.dir + 1) % 4
+        elif action == 'grab':
+            # Cập nhật trạng thái khi lấy vàng
+            self.has_gold = True
 
     def get_kb(self):
         return self.kb
 
     def get_action_log(self):
         return self.action_log
+
+    def find_wumpus_to_shoot(self):
+        """Tìm Wumpus để bắn tên"""
+        for i in range(self.N):
+            for j in range(self.N):
+                if self.kb[j][i] == 'warn' and (i, j) not in self.visited:
+                    # Kiểm tra xem có thể bắn được không
+                    if self.can_shoot_at(i, j):
+                        return (i, j)
+        return None
+
+    def can_shoot_at(self, target_x, target_y):
+        """Kiểm tra có thể bắn tên vào ô target không"""
+        # Kiểm tra xem target có nằm trên đường thẳng từ agent không
+        dx = target_x - self.x
+        dy = target_y - self.y
+        
+        # Chỉ bắn được theo hướng agent đang nhìn
+        if self.dir == 0 and dy > 0:  # Nhìn lên
+            return dx == 0
+        elif self.dir == 1 and dx > 0:  # Nhìn phải
+            return dy == 0
+        elif self.dir == 2 and dy < 0:  # Nhìn xuống
+            return dx == 0
+        elif self.dir == 3 and dx < 0:  # Nhìn trái
+            return dy == 0
+        return False
+
+    def turn_towards(self, target):
+        """Xoay hướng về phía target"""
+        target_x, target_y = target
+        dx = target_x - self.x
+        dy = target_y - self.y
+        
+        # Xác định hướng cần xoay
+        if dx > 0:  # Cần nhìn phải
+            target_dir = 1
+        elif dx < 0:  # Cần nhìn trái
+            target_dir = 3
+        elif dy > 0:  # Cần nhìn lên
+            target_dir = 0
+        elif dy < 0:  # Cần nhìn xuống
+            target_dir = 2
+        else:
+            return 'forward'  # Đã ở đúng hướng
+            
+        # Xoay về hướng target
+        if target_dir == self.dir:
+            return 'forward'
+        elif (target_dir - self.dir) % 4 == 1:
+            return 'right'
+        else:
+            return 'left'
