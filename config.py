@@ -3,3 +3,15 @@ DEFAULT_WUMPUS = 1
 DEFAULT_PIT_PROBABILITY = 0.15
 MAX_ACTIONS_BEFORE_WUMPUS_MOVES = 5
 STEP_DELAY = 500  # milliseconds delay in auto-play mode
+
+# Scoring system
+SCORE_DIE = -1000
+SCORE_GOLD = 1000
+SCORE_ACTION = -1
+SCORE_SHOOT = -10
+
+# Arrow settings
+DEFAULT_ARROWS = 1
+
+# Wumpus movement
+WUMPUS_MOVE_INTERVAL = 5
