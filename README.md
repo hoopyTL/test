@@ -9,3 +9,4 @@ K = số Wumpus
 p = xác suất pit (0.0 - 1.0)
 seed = seed random (giúp kiểm thử lại đúng map)
 delay = thời gian chờ giữa các bước (giúp quan sát)
+
