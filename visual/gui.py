@@ -80,6 +80,19 @@ class WumpusGUI(tk.Tk):
         self.btn_stop = tk.Button(top_frame, text="Pause", command=self.stop_auto, state=tk.DISABLED)
         self.btn_stop.pack(side=tk.LEFT, padx=5, pady=5)
 
+        # Thêm info frame
+        info_frame = tk.Frame(self)
+        info_frame.pack(side=tk.TOP, fill=tk.X, padx=10)
+        
+        self.lbl_score = tk.Label(info_frame, text="Score: 0", font=('Arial', 12, 'bold'))
+        self.lbl_score.pack(side=tk.LEFT, padx=10)
+        
+        self.lbl_arrows = tk.Label(info_frame, text="Arrows: 1", font=('Arial', 12))
+        self.lbl_arrows.pack(side=tk.LEFT, padx=10)
+        
+        self.lbl_scream = tk.Label(info_frame, text="", font=('Arial', 12, 'bold'), fg='red')
+        self.lbl_scream.pack(side=tk.LEFT, padx=10)
+
         self.log_text = tk.Text(self, height=8, width=55, bg="#21252b", fg="#C9D1D9")
         self.log_text.pack(side=tk.BOTTOM, fill=tk.X)
 
@@ -179,21 +192,30 @@ class WumpusGUI(tk.Tk):
     def next_step(self):
         if not self.env.agent_alive:
             self.log("Agent đã chết! Không thể đi tiếp.")
+            self.btn_next['state'] = tk.DISABLED
+            self.btn_auto['state'] = tk.DISABLED
+            self.btn_stop['state'] = tk.DISABLED
             return
         percepts = self.env.get_percepts()
         action = self.agent.next_action(percepts)
         self.env.step(action)
         self.agent.update_agent_state(action, percepts)
+        
+        # Cập nhật thông tin hiển thị
+        self.lbl_score.config(text=f"Score: {self.env.score}")
+        self.lbl_arrows.config(text=f"Arrows: {self.env.agent_arrows}")
+        
+        # Hiển thị scream
+        if percepts.get('scream', False):
+            self.lbl_scream.config(text="SCREAM! 💀")
+            self.log("💀 SCREAM! Wumpus đã bị giết!")
+        else:
+            self.lbl_scream.config(text="")
         self.log(f"Percepts: {percepts} | Action: {action}")
         self.update_board()
-        # END GAME nếu lấy được vàng
-        if action == 'grab':
-            self.log("🎉 Agent đã lấy được vàng!")
-            self.btn_next['state'] = tk.DISABLED
-            self.btn_auto['state'] = tk.DISABLED
-            self.btn_stop['state'] = tk.DISABLED
-        elif not self.env.agent_alive:
-            self.log("Agent đã chết! Game Over.")
+        # END GAME chỉ khi agent đã về nhà và climb
+        if action == 'climb' and self.agent.has_gold and self.agent.x == 0 and self.agent.y == 0:
+            self.log("🎉 Agent đã lấy vàng và thoát ra ngoài thành công!")
             self.btn_next['state'] = tk.DISABLED
             self.btn_auto['state'] = tk.DISABLED
             self.btn_stop['state'] = tk.DISABLED
@@ -219,13 +241,18 @@ class WumpusGUI(tk.Tk):
             self.agent.update_agent_state(action, percepts)
             self.log(f"Percepts: {percepts} | Action: {action}")
             self.update_board()
-            if action == 'grab':
-                self.log("🎉 Agent đã lấy được vàng!")
+            if not self.env.agent_alive:
+                self.log("Agent đã chết! Game Over.")
                 self.btn_next['state'] = tk.DISABLED
                 self.btn_auto['state'] = tk.DISABLED
                 self.btn_stop['state'] = tk.DISABLED
                 break
-            if not self.env.agent_alive: break
+            if action == 'climb' and self.agent.has_gold and self.agent.x == 0 and self.agent.y == 0:
+                self.log("🎉 Agent đã lấy vàng và thoát ra ngoài thành công!")
+                self.btn_next['state'] = tk.DISABLED
+                self.btn_auto['state'] = tk.DISABLED
+                self.btn_stop['state'] = tk.DISABLED
+                break
             time.sleep(self.delay)
 
 if __name__ == '__main__':
